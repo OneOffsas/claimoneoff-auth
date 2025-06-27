@@ -1,53 +1,35 @@
+import { getUserByEmail } from '../../lib/google';
+import bcrypt from 'bcryptjs';
 
-import { useState } from 'react';
-import { useRouter } from 'next/router';
-
-export default function LoginPage() {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
-  const router = useRouter();
-
-  const handleLogin = async (e) => {
-    e.preventDefault();
-    const res = await fetch('/api/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password })
-    });
-    const data = await res.json();
-    if (res.ok) {
-      router.push(data.redirectTo);
-    } else {
-      setError(data.error);
+export default async function handler(req, res) {
+  try {
+    if (req.method !== 'POST') {
+      return res.status(405).json({ message: 'Méthode non autorisée' });
     }
-  };
 
-  return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100">
-      <form onSubmit={handleLogin} className="bg-white p-6 rounded shadow-md w-96">
-        <h2 className="text-xl font-bold mb-4 text-center">Connexion ClaimOneOff</h2>
-        <input
-          type="email"
-          placeholder="Email"
-          className="border p-2 w-full mb-2"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          required
-        />
-        <input
-          type="password"
-          placeholder="Mot de passe"
-          className="border p-2 w-full mb-4"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          required
-        />
-        {error && <p className="text-red-500 text-sm mb-2">{error}</p>}
-        <button className="bg-blue-600 text-white px-4 py-2 rounded w-full">
-          Se connecter
-        </button>
-      </form>
-    </div>
-  );
+    const { email, password } = req.body;
+
+    const user = await getUserByEmail(email);
+    if (!user) {
+      return res.status(401).json({ message: 'Utilisateur non trouvé' });
+    }
+
+    const passwordMatch = await bcrypt.compare(password, user.MotDePasse_Hash);
+    if (!passwordMatch) {
+      return res.status(401).json({ message: 'Mot de passe incorrect' });
+    }
+
+    // Connexion OK
+    res.status(200).json({
+      message: 'Connexion réussie',
+      role: user.Role,
+      email: user.Email,
+      societe: user.Societe
+    });
+
+  } catch (error) {
+    console.error('Erreur API /login :', error);  // 🔥 Voir l’erreur dans Netlify logs
+    res.status(500).json({ message: 'Erreur serveur', detail: error.message });
+  }
 }
+
